@@ -39,6 +39,7 @@ public:
     static ApiError notFound(const QString &resource, const QString &id);
     static ApiError fromJsonError(const JsonError &error);
     static ApiError fromSqlError(const QSqlError &error);
+    
     ApiError();
     ApiError(ErrorCode code, const QString &message = QString());
     ~ApiError();

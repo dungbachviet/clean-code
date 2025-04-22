@@ -1,6 +1,7 @@
 #include "documents/documentapihandler.h"
 #include "documents/documenttypes.h"
 #include "documents/documentdbrepo.h"
+#include "documents/documentservices.h"
 
 #include <QDebug>
 
@@ -208,12 +209,12 @@ void DocumentApiHandler::createFile(const PiMqttMessage &msg)
     document.level = DocumentDbRepo::getLevel(document.parentId);
     document.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     QByteArray decodedContent;
-    ApiError decodeError= DocumentDbRepo::decodeAndValidateBase64File(request.fileContent.toUtf8(), document.extension, decodedContent);
+    ApiError decodeError= DocumentServices::decodeAndValidateBase64File(request.fileContent.toUtf8(), document.extension, decodedContent);
     if (decodeError.isError()) 
     { 
         return sendErrorResponse(msg, decodeError);
     }
-    ApiError fileError = DocumentDbRepo::saveFileToSystem(document.id, document.extension, decodedContent);
+    ApiError fileError = DocumentServices::saveFileToSystem(document.id, document.extension, decodedContent);
 
     if (fileError.isError())
     {
@@ -245,7 +246,7 @@ void DocumentApiHandler::getFile(const PiMqttMessage &msg)
     }
 
     QString fileContentBase64;
-    ApiError fileError = DocumentDbRepo::readFileFromSystem(document.id, document.extension, fileContentBase64);
+    ApiError fileError = DocumentServices::readFileFromSystem(document.id, document.extension, fileContentBase64);
     if (fileError.isError())
     {
         return sendErrorResponse(msg, fileError);
@@ -466,9 +467,9 @@ void DocumentApiHandler::getTree(const PiMqttMessage &msg)
 
     QVector<DocumentDetail> flatList = DocumentDbRepo::getAllDescendants(id);
     
-    QSharedPointer<FolderNode> rootTree = DocumentDbRepo::buildFolderTree(id, rootFolder, flatList);
+    QSharedPointer<FolderNode> rootTree = DocumentServices::buildFolderTree(id, rootFolder, flatList);
 
-    sendResponse(msg, DocumentDbRepo::convertToPlainNode(rootTree));
+    sendResponse(msg, DocumentServices::convertToPlainNode(rootTree));
 }
 
 void DocumentApiHandler::getAllTree(const PiMqttMessage &msg)
@@ -481,6 +482,6 @@ void DocumentApiHandler::getAllTree(const PiMqttMessage &msg)
         return sendErrorResponse(msg, err);
     }
 
-    QSharedPointer<FolderNode> rootTree = DocumentDbRepo::buildAllTree(flatList);
-    sendResponse(msg, DocumentDbRepo::convertToPlainNode(rootTree));
+    QSharedPointer<FolderNode> rootTree = DocumentServices::buildAllTree(flatList);
+    sendResponse(msg, DocumentServices::convertToPlainNode(rootTree));
 }
