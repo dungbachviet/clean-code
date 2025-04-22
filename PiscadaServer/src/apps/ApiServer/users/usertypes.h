@@ -1,0 +1,9 @@
+#ifndef PISCADA_API_SERVER_USER_TYPES_H
+#define PISCADA_API_SERVER_USER_TYPES_H
+
+struct User
+{
+
+};
+
+#endif // PISCADA_API_SERVER_USER_TYPES_H

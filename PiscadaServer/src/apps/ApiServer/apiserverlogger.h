@@ -1,0 +1,8 @@
+#ifndef PISCADA_API_SERVER_LOGGER_H
+#define PISCADA_API_SERVER_LOGGER_H
+
+#include <QLoggingCategory>
+
+Q_DECLARE_LOGGING_CATEGORY(ApiServerModuleLogger)
+
+#endif // PISCADA_API_SERVER_LOGGER_H
