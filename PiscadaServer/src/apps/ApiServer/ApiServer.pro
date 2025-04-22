@@ -17,6 +17,7 @@ include(templates/templates.pri)
 include(systems/systems.pri)
 include(subsystems/subsystems.pri)
 include(popups/popups.pri)
+include(documents/documents.pri)
 
 HEADERS += \
     apierror.h \

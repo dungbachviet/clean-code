@@ -27,13 +27,18 @@ public:
         DbConnectionError,
         DbStatementError,
         DbTransactionError,
+
+        Conflict,
+        InternalError,
     };
 
     static ApiError notImplemented();
+    static ApiError conflict(const QString &message);
+    static ApiError internalError(const QString &message);
+
     static ApiError notFound(const QString &resource, const QString &id);
     static ApiError fromJsonError(const JsonError &error);
     static ApiError fromSqlError(const QSqlError &error);
-
     ApiError();
     ApiError(ErrorCode code, const QString &message = QString());
     ~ApiError();

@@ -9,6 +9,16 @@ ApiError ApiError::notImplemented()
     return ApiError(NotImplemented, "Not implemented");
 }
 
+ApiError ApiError::conflict(const QString &message)
+{
+    return ApiError(Conflict, message);
+}
+
+ApiError ApiError::internalError(const QString &message)
+{
+    return ApiError(InternalError, message);
+}
+
 ApiError ApiError::notFound(const QString &resource, const QString &id)
 {
     QString errorMessage = QString("Resource '%1' with id '%2' not found").arg(resource, id);

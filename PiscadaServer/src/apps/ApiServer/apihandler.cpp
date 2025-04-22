@@ -5,7 +5,6 @@
 #include "pimqtt/pimqttmessage.h"
 #include "pimqtt/pimqttpublishproperties.h"
 
-
 ApiError getUuidFromTopic(const QString &topic, Uuid &id)
 {
     QStringList path = topic.split('/');
@@ -76,7 +75,6 @@ void ApiHandler::sendResponse(const PiMqttMessage &req, const Json &response)
     msg.setProperties(responseProperties);
 
     qCInfo(ApiServerModuleLogger) << "Sending response to" << responseTopic;
-
     m_client->publish(msg);
 
     msg.setTopic(testTopic);
