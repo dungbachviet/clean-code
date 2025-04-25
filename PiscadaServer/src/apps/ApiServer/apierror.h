@@ -19,7 +19,7 @@ public:
         NotFound,
         InvalidRequest,
         UnknownError,
-        Conflict,
+        ConflictError,
         InternalError,
 
         JsonParseError,
