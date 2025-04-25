@@ -10,3 +10,4 @@ SOURCES += \
     documents/documentdbrepo.cpp \
     documents/documentservices.cpp
 
+INCLUDEPATH += $$PWD

@@ -19,6 +19,8 @@ public:
         NotFound,
         InvalidRequest,
         UnknownError,
+        Conflict,
+        InternalError,
 
         JsonParseError,
         JsonTypeError,
@@ -27,13 +29,10 @@ public:
         DbConnectionError,
         DbStatementError,
         DbTransactionError,
-
-        Conflict,
-        InternalError,
     };
 
     static ApiError notImplemented();
-    static ApiError conflict(const QString &message);
+    static ApiError conflictError(const QString &message);
     static ApiError internalError(const QString &message);
 
     static ApiError notFound(const QString &resource, const QString &id);

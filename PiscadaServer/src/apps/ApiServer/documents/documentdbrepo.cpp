@@ -7,7 +7,7 @@
 #include <QFile>
 #include <QDir>
 
-bool DocumentDbRepo::isNameExists(const QString &name, const QString &parentId, const QString &type)
+bool DocumentDbRepo::doesNameExist(const QString &name, const QString &folderId, const QString &type)
 {
     QSqlDatabase db = getConnection(); 
     QSqlQuery query(db);
@@ -17,8 +17,8 @@ bool DocumentDbRepo::isNameExists(const QString &name, const QString &parentId, 
         FROM `piscada_system`.`documents`
         WHERE name = :name 
         AND type = :type
-        AND is_deleted = 0
-        AND (parent_id = :parent_id OR (parent_id IS NULL AND :parent_id IS NULL))
+        AND isDeleted = 0
+        AND (parentId = :folderId OR (parentId IS NULL AND :folderId IS NULL))
         LIMIT 1
     )SQL";
 
@@ -30,7 +30,7 @@ bool DocumentDbRepo::isNameExists(const QString &name, const QString &parentId, 
 
     query.bindValue(":name", name);
     query.bindValue(":type", type);
-    query.bindValue(":parent_id", parentId.isEmpty() ? QVariant(QVariant::String) : parentId);
+    query.bindValue(":folderId", folderId.isEmpty() ? QVariant(QVariant::String) : folderId);
 
     if (!query.exec())
     {
@@ -70,114 +70,6 @@ bool DocumentDbRepo::isValidParent(const QString &parentId)
     return query.next(); 
 }
 
-int DocumentDbRepo::getLevel(const QString &parentId)
-{
-    if (parentId.isEmpty()) {
-        return 1;  
-    }
-    QSqlDatabase db = getConnection();
-    QSqlQuery query(db);
-
-    QString sql = R"SQL(
-        SELECT level 
-        FROM `piscada_system`.`documents` 
-        WHERE id = :parentId
-    )SQL"; 
-    if (!query.prepare(sql))
-    {
-        qDebug() << "Error prepare to query in getlevel" << query.lastError().text();
-        return 1;
-    }
-
-    query.bindValue(":parentId", parentId);
-    if (!query.exec()) {
-        qDebug() << "Error query in getlevel" << query.lastError().text();
-        return 1;
-    }
-
-    if (query.next() && !query.value(0).isNull()) {
-        return query.value(0).toInt() + 1;  
-    }
-    return 1;
-}
-
-QVector<DocumentDetail> DocumentDbRepo::getAllDescendants(const QString &parentId)
-{
-    QVector<DocumentDetail> result;
-
-    QSqlDatabase db = getConnection();
-    QSqlQuery query(db);
-
-    QString sql = R"SQL(
-        WITH RECURSIVE descendants AS (
-            SELECT * FROM piscada_system.documents WHERE parent_id = :parent_id
-            UNION ALL
-            SELECT d.* FROM piscada_system.documents d
-            INNER JOIN descendants ds ON d.parent_id = ds.id
-        )
-        SELECT * FROM descendants
-    )SQL";
-
-    if (!query.prepare(sql)) {
-        qDebug() << "Error preparing recursive descendant query:" << query.lastError().text();
-        return result;
-    }
-
-    query.bindValue(":parent_id", parentId);
-
-    if (!query.exec()) {
-        qDebug() << "Error executing recursive descendant query:" << query.lastError().text();
-        return result;
-    }
-
-    while (query.next()) {
-        DocumentDetail doc;
-        doc.id = query.value("id").toString();
-        doc.parentId = query.value("parent_id").isNull() ? "" : query.value("parent_id").toString();
-        doc.name = query.value("name").toString();
-        doc.type = query.value("type").toString();
-        doc.extension = query.value("extension").isNull() ? "" : query.value("extension").toString();
-        doc.level = query.value("level").toInt();
-        result.append(doc);
-    }
-    return result;
-}
-
-ApiError DocumentDbRepo::updateLevelForDescendants(const QString &documentId, int deltaLevel)
-{
-    if (deltaLevel == 0)
-        return ApiError();
-
-    QVector<DocumentDetail> descendants = getAllDescendants(documentId);
-    if (descendants.isEmpty())
-        return ApiError();
-
-    QSqlDatabase db = getConnection();
-    QSqlQuery query(db);
-
-    for (const DocumentDetail &doc : descendants)
-    {
-        QString sql = R"SQL(
-            UPDATE `piscada_system`.`documents`
-            SET `level` = `level` + :delta
-            WHERE `id` = :id
-        )SQL";
-
-        if (!query.prepare(sql))
-        {
-            return ApiError::fromSqlError(query.lastError());
-        }
-        query.bindValue(":delta", deltaLevel);
-        query.bindValue(":id", doc.id);
-
-        if (!query.exec())
-        {
-            return ApiError::fromSqlError(query.lastError());
-        }
-    }
-    return ApiError();
-}
-
 ApiError DocumentDbRepo::create(DocumentDetail &document)
 {
     QSqlDatabase db = getConnection();
@@ -187,26 +79,24 @@ ApiError DocumentDbRepo::create(DocumentDetail &document)
         INSERT INTO `piscada_system`.`documents` 
         (
             `id`, 
-            `parent_id`, 
+            `parentId`, 
             `name`, 
             `description`, 
             `type`, 
             `extension`, 
-            `level`, 
-            `write_access`, 
-            `read_access`
+            `writeAccess`, 
+            `readAccess`
         )
         VALUES 
         (
             :id, 
-            :parent_id, 
+            :parentId, 
             :name, 
             :description, 
             :type, 
             :extension, 
-            :level, 
-            :write_access, 
-            :read_access
+            :writeAccess, 
+            :readAccess
         );
     )SQL";
 
@@ -216,14 +106,13 @@ ApiError DocumentDbRepo::create(DocumentDetail &document)
     }
 
     query.bindValue(":id", document.id);
-    query.bindValue(":parent_id", document.parentId.isEmpty() ? QVariant() : document.parentId);    
+    query.bindValue(":parentId", document.parentId.isEmpty() ? QVariant() : document.parentId);    
     query.bindValue(":name", document.name);
     query.bindValue(":description", document.description);
     query.bindValue(":type", document.type);  
     query.bindValue(":extension", document.extension.isEmpty() ? QVariant() : document.extension);
-    query.bindValue(":level", document.level);
-    query.bindValue(":write_access", document.writeAccess);
-    query.bindValue(":read_access", document.readAccess);
+    query.bindValue(":writeAccess", document.writeAccess);
+    query.bindValue(":readAccess", document.readAccess);
 
     if (!query.exec())
     {
@@ -241,17 +130,16 @@ ApiError DocumentDbRepo::read(const QString &id, DocumentDetail &document)
     QString sql = R"SQL(
         SELECT
             `id`,
-            `parent_id`,
+            `parentId`,
             `name`,
             `description`,
             `type`,
             `extension`,
-            `level`,
-            `write_access`,
-            `read_access`,
-            `is_deleted`,
-            `created_at`,
-            `updated_at`
+            `writeAccess`,
+            `readAccess`,
+            `isDeleted`,
+            `createdAt`,
+            `updatedAt`
         FROM
             `piscada_system`.`documents` 
         WHERE
@@ -276,14 +164,13 @@ ApiError DocumentDbRepo::read(const QString &id, DocumentDetail &document)
     }
 
     document.id = query.value("id").toString();
-    document.parentId = query.value("parent_id").isNull() ? "" : query.value("parent_id").toString();
+    document.parentId = query.value("parentId").isNull() ? "" : query.value("parentId").toString();
     document.name = query.value("name").toString();
     document.description = query.value("description").isNull() ? "" : query.value("description").toString();
     document.type = query.value("type").toString();
     document.extension = query.value("extension").isNull() ? "" : query.value("extension").toString();
-    document.level = query.value("level").toInt();
-    document.writeAccess = query.value("write_access").isNull() ? -1 : query.value("write_access").toInt();
-    document.readAccess = query.value("read_access").isNull() ? -1 : query.value("read_access").toInt();
+    document.writeAccess = query.value("writeAccess").isNull() ? -1 : query.value("writeAccess").toInt();
+    document.readAccess = query.value("readAccess").isNull() ? -1 : query.value("readAccess").toInt();
 
     JsonError jsonError;
     if (jsonError.type() != JsonError::NoError)
@@ -294,7 +181,7 @@ ApiError DocumentDbRepo::read(const QString &id, DocumentDetail &document)
     return ApiError();
 }
 
-ApiError DocumentDbRepo::list(QVector<DocumentDetail> &documents)
+ApiError DocumentDbRepo::list(QVector<DocumentDetail> &documents, bool getArchivedFile)
 {
     QSqlDatabase db = getConnection();
     QSqlQuery query(db);
@@ -302,27 +189,28 @@ ApiError DocumentDbRepo::list(QVector<DocumentDetail> &documents)
     QString sql = R"SQL(
         SELECT
             `id`,
-            `parent_id`,
+            `parentId`,
             `name`,
             `description`,
             `type`,
             `extension`,
-            `level`,
-            `write_access`,
-            `read_access`,
-            `is_deleted`,
-            `created_at`,
-            `updated_at`
+            `writeAccess`,
+            `readAccess`,
+            `isDeleted`,
+            `createdAt`,
+            `updatedAt`
         FROM
             `piscada_system`.`documents`
-        WHERE
-            `is_deleted` = 0;
+        WHERE 
+            `isDeleted` = :isDeleted
     )SQL";
 
     if (!query.prepare(sql))
     {
         return ApiError::fromSqlError(query.lastError());
     }
+
+    query.bindValue(":isDeleted", getArchivedFile ? 1 : 0);
 
     if (!query.exec())
     {
@@ -333,14 +221,13 @@ ApiError DocumentDbRepo::list(QVector<DocumentDetail> &documents)
     {
         DocumentDetail doc;
         doc.id = query.value("id").toString();
-        doc.parentId = query.value("parent_id").isNull() ? "" : query.value("parent_id").toString();
+        doc.parentId = query.value("parentId").isNull() ? "" : query.value("parentId").toString();
         doc.name = query.value("name").toString();
         doc.description = query.value("description").isNull() ? "" : query.value("description").toString();
         doc.type = query.value("type").toString();
         doc.extension = query.value("extension").isNull() ? "" : query.value("extension").toString();
-        doc.level = query.value("level").toInt();
-        doc.writeAccess = query.value("write_access").isNull() ? -1 : query.value("write_access").toInt();
-        doc.readAccess = query.value("read_access").isNull() ? -1 : query.value("read_access").toInt();
+        doc.writeAccess = query.value("writeAccess").isNull() ? -1 : query.value("writeAccess").toInt();
+        doc.readAccess = query.value("readAccess").isNull() ? -1 : query.value("readAccess").toInt();
 
         documents.append(doc);
     }
@@ -358,8 +245,9 @@ ApiError DocumentDbRepo::update(const QString &id, DocumentDetail &document)
         SET
             `name` = :name,
             `description` = :description,
-            `write_access` = :write_access,
-            `read_access` = :read_access
+            `writeAccess` = :writeAccess,
+            `readAccess` = :readAccess,
+            `parentId` = :parentId
         WHERE
             `id` = :id;
     )SQL";
@@ -371,8 +259,9 @@ ApiError DocumentDbRepo::update(const QString &id, DocumentDetail &document)
 
     query.bindValue(":name", document.name);
     query.bindValue(":description", document.description);
-    query.bindValue(":write_access", document.writeAccess);
-    query.bindValue(":read_access", document.readAccess);
+    query.bindValue(":writeAccess", document.writeAccess);
+    query.bindValue(":readAccess", document.readAccess);
+    query.bindValue(":parentId", document.parentId.isEmpty() ? QVariant() : document.parentId);
     query.bindValue(":id", id);
 
     if (!query.exec())
@@ -392,7 +281,7 @@ ApiError DocumentDbRepo::remove(const QString &id)
         DELETE FROM
             `piscada_system`.`documents`
         WHERE
-            `id` = :id and `is_deleted` = 0;
+            `id` = :id and `isDeleted` = 0;
     )SQL";
 
     if (!query.prepare(sql))
@@ -410,98 +299,14 @@ ApiError DocumentDbRepo::remove(const QString &id)
     return ApiError();
 }
 
-ApiError DocumentDbRepo::listChildren(const QString &id, QVector<DocumentDetail> &documents)
-{
-    QSqlDatabase db = getConnection();
-    QSqlQuery query(db);
-
-    QString sql = R"SQL(
-        SELECT
-            `id`,
-            `parent_id`,
-            `name`,
-            `description`,
-            `type`,
-            `extension`,
-            `level`,
-            `write_access`,
-            `read_access`,
-            `is_deleted`,
-            `created_at`,
-            `updated_at`
-        FROM
-            `piscada_system`.`documents`
-        WHERE
-            (parent_id = :parent_id OR (parent_id IS NULL AND :parent_id IS NULL))
-            AND is_deleted = 0;
-    )SQL";
-
-    if (!query.prepare(sql))
-    {
-        return ApiError::fromSqlError(query.lastError());
-    }
-    query.bindValue(":parent_id", id.isEmpty() ? QVariant() : id);
-
-    if (!query.exec())
-    {
-        return ApiError::fromSqlError(query.lastError());
-    }
-
-    while (query.next())
-    {
-        DocumentDetail doc;
-        doc.id = query.value("id").toString();
-        doc.parentId = query.value("parent_id").isNull() ? "" : query.value("parent_id").toString();
-        doc.name = query.value("name").toString();
-        doc.description = query.value("description").isNull() ? "" : query.value("description").toString();
-        doc.type = query.value("type").toString();
-        doc.extension = query.value("extension").isNull() ? "" : query.value("extension").toString();
-        doc.level = query.value("level").toInt();
-        doc.writeAccess = query.value("write_access").isNull() ? -1 : query.value("write_access").toInt();
-        doc.readAccess = query.value("read_access").isNull() ? -1 : query.value("read_access").toInt();
-
-        documents.append(doc);
-    }
-
-    return ApiError();
-}
-
-ApiError DocumentDbRepo::move(const QString &id, DocumentDetail &document)
-{
-    QSqlDatabase db = getConnection();
-    QSqlQuery query(db);
-    
-    QString sql = R"SQL(
-        UPDATE `piscada_system`.`documents`
-        SET `parent_id` = :new_parent_id,
-            `level` = :new_level
-        WHERE `id` = :id
-    )SQL";
-    
-    if (!query.prepare(sql))
-    {
-        return ApiError::fromSqlError(query.lastError());
-    }
-    
-    query.bindValue(":new_parent_id", document.parentId.isEmpty() ? QVariant() : document.parentId);  
-    query.bindValue(":new_level", document.level);
-    query.bindValue(":id", id);
-    
-    if (!query.exec())
-    {
-        return ApiError::fromSqlError(query.lastError());
-    }
-    return ApiError();
-}
-
-ApiError DocumentDbRepo::softDelete(const QString &id)
+ApiError DocumentDbRepo::archiveFile(const QString &id)
 {
     QSqlDatabase db = getConnection();
     QSqlQuery query(db);
 
     QString sql = R"SQL(
         UPDATE `piscada_system`.`documents`
-        SET `is_deleted` = 1, `parent_id` = NULL
+        SET `isDeleted` = 1, `parentId` = NULL
         WHERE `id` = :id
     )SQL";
 
@@ -518,17 +323,16 @@ ApiError DocumentDbRepo::softDelete(const QString &id)
     return ApiError();
 }
 
-ApiError DocumentDbRepo::restore(const QString &id, DocumentDetail &document)
+ApiError DocumentDbRepo::unarchiveFile(const QString &id, DocumentDetail &document)
 {
     QSqlDatabase db = getConnection();
     QSqlQuery query(db);
 
     QString sql = R"SQL(
         UPDATE `piscada_system`.`documents`
-        SET `is_deleted` = 0, 
-            `parent_id` = :new_parent_id,
-            `level` = :new_level
-        WHERE id = :id AND is_deleted = 1
+        SET `isDeleted` = 0, 
+            `parentId` = :parentId
+        WHERE id = :id AND isDeleted = 1
     )SQL";
 
     if (!query.prepare(sql)) {
@@ -536,8 +340,7 @@ ApiError DocumentDbRepo::restore(const QString &id, DocumentDetail &document)
     }
 
     query.bindValue(":id", id);
-    query.bindValue(":new_parent_id", document.parentId.isEmpty() ? QVariant() : document.parentId);
-    query.bindValue(":new_level", document.level);
+    query.bindValue(":parentId", document.parentId.isEmpty() ? QVariant() : document.parentId);
 
     if (!query.exec()) {
         return ApiError::fromSqlError(query.lastError());
@@ -550,57 +353,51 @@ ApiError DocumentDbRepo::restore(const QString &id, DocumentDetail &document)
     return ApiError();
 }
 
-ApiError DocumentDbRepo::listDeleted(QVector<DocumentDetail> &documents)
+ApiError DocumentDbRepo::getChildrenOfFolder(const QString &folderId, QVector<DocumentDetail> &documents)
 {
     QSqlDatabase db = getConnection();
     QSqlQuery query(db);
-
     QString sql = R"SQL(
         SELECT
             `id`,
-            `parent_id`,
+            `parentId`,
             `name`,
             `description`,
             `type`,
             `extension`,
-            `level`,
-            `write_access`,
-            `read_access`,
-            `is_deleted`,
-            `created_at`,
-            `updated_at`
+            `writeAccess`,
+            `readAccess`,
+            `isDeleted`,
+            `createdAt`,
+            `updatedAt`
         FROM
             `piscada_system`.`documents`
         WHERE
-            `is_deleted` = 1;
+            (parentId = :folderId OR (parentId IS NULL AND :folderId IS NULL))
+            AND isDeleted = 0;
     )SQL";
-
     if (!query.prepare(sql))
     {
         return ApiError::fromSqlError(query.lastError());
     }
-
+    query.bindValue(":folderId", folderId.isEmpty() ? QVariant() : folderId);
     if (!query.exec())
     {
         return ApiError::fromSqlError(query.lastError());
     }
-
     while (query.next())
     {
         DocumentDetail doc;
         doc.id = query.value("id").toString();
-        doc.parentId = query.value("parent_id").isNull() ? "" : query.value("parent_id").toString();
+        doc.parentId = query.value("parentId").isNull() ? "" : query.value("parentId").toString();
         doc.name = query.value("name").toString();
         doc.description = query.value("description").isNull() ? "" : query.value("description").toString();
         doc.type = query.value("type").toString();
         doc.extension = query.value("extension").isNull() ? "" : query.value("extension").toString();
-        doc.level = query.value("level").toInt();
-        doc.writeAccess = query.value("write_access").isNull() ? -1 : query.value("write_access").toInt();
-        doc.readAccess = query.value("read_access").isNull() ? -1 : query.value("read_access").toInt();
-
+        doc.writeAccess = query.value("writeAccess").isNull() ? -1 : query.value("writeAccess").toInt();
+        doc.readAccess = query.value("readAccess").isNull() ? -1 : query.value("readAccess").toInt();
         documents.append(doc);
     }
-
     return ApiError();
 }
 

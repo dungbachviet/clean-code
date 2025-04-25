@@ -5,6 +5,18 @@
 #include <QFile>
 #include <QDir>
 
+QMap<QString, QString> mimeToExt = {
+    {"application/pdf", "pdf"},
+    {"text/plain", "txt"},
+    {"image/png", "png"},
+    {"image/jpeg", "jpg"},
+    {"application/zip", "zip"},
+    {"application/vnd.openxmlformats-officedocument.wordprocessingml.document", "docx"},
+    {"application/msword", "doc"},
+    {"application/vnd.ms-excel", "xls"},
+    {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx"}
+};
+
 ApiError DocumentServices::decodeAndValidateBase64File(const QByteArray &fileContent, const QString &expectedExtension, QByteArray &decodedContent)
 {
     const QByteArray headerPrefix = "data:";
@@ -22,18 +34,6 @@ ApiError DocumentServices::decodeAndValidateBase64File(const QByteArray &fileCon
         {
             mimeType = QString::fromUtf8(header.mid(headerPrefix.length(), semiIndex - headerPrefix.length()));
         }
-
-        QMap<QString, QString> mimeToExt = {
-            {"application/pdf", "pdf"},
-            {"text/plain", "txt"},
-            {"image/png", "png"},
-            {"image/jpeg", "jpg"},
-            {"application/zip", "zip"},
-            {"application/vnd.openxmlformats-officedocument.wordprocessingml.document", "docx"},
-            {"application/msword", "doc"},
-            {"application/vnd.ms-excel", "xls"},
-            {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx"}
-        };
 
         if (mimeToExt.contains(mimeType))
         {
@@ -57,17 +57,16 @@ ApiError DocumentServices::decodeAndValidateBase64File(const QByteArray &fileCon
 
 ApiError DocumentServices::saveFileToSystem(const QString &id, const QString &extension, const QByteArray &fileContent)
 {
-    QString dirPath = "/Piscada/documents";
-    QDir dir(dirPath);
+    QDir dir(storageDirectory);
 
     if (!dir.exists())
     {
-        if (!dir.mkpath(dirPath))
+        if (!dir.mkpath(storageDirectory))
         {
             return ApiError::internalError("Failed to create directory on the system");
         }
     }
-    QString filePath = QString("%1/%2.%3").arg(dirPath, id, extension);
+    QString filePath = QString("%1/%2.%3").arg(storageDirectory, id, extension);
     QFile file(filePath);
     if (!file.open(QIODevice::WriteOnly))
     {
@@ -81,7 +80,7 @@ ApiError DocumentServices::saveFileToSystem(const QString &id, const QString &ex
 
 ApiError DocumentServices::readFileFromSystem(const QString &id, const QString &extension, QString &fileContentBase64)
 {
-    QString filePath = QString("/Piscada/documents/%1.%2").arg(id, extension);
+    QString filePath = QString("%1/%2.%3").arg(storageDirectory, id, extension);
     QFile file(filePath);
 
     if (!file.exists())
@@ -101,113 +100,75 @@ ApiError DocumentServices::readFileFromSystem(const QString &id, const QString &
     return ApiError();
 }
 
-
-QSharedPointer<FolderNode> DocumentServices::buildFolderTree(const QString &rootId, const DocumentDetail &rootFolder, const QVector<DocumentDetail> &flatList)
+QSharedPointer<FolderNode> DocumentServices::buildFullTree(const QVector<DocumentDetail> &documentList)
 {
     QHash<QString, QSharedPointer<FolderNode>> folderMap;
 
-    auto root = QSharedPointer<FolderNode>::create();
-    root->id = rootFolder.id;
-    root->name = rootFolder.name;
-    root->type = rootFolder.type;
-    folderMap.insert(rootId, root);
+    auto rootPtr = QSharedPointer<FolderNode>::create();
+    rootPtr->id = "";
+    rootPtr->name = "root";
+    rootPtr->type = "";
 
-    for (const auto &item : flatList)
+    for (const auto &item : documentList)
     {
         if (item.type == "folder")
         {
-            auto node = QSharedPointer<FolderNode>::create();
-            node->id = item.id;
-            node->name = item.name;
-            root->type = rootFolder.type;
-            folderMap.insert(item.id, node);
+            auto folderNodePtr = QSharedPointer<FolderNode>::create();
+            folderNodePtr->id = item.id;
+            folderNodePtr->name = item.name;
+            folderNodePtr->type = item.type;
+            folderMap.insert(item.id, folderNodePtr);
         }
     }
 
-    for (const auto &item : flatList)
-    {
-        if (!folderMap.contains(item.parentId))
-            continue;
-
-        auto parent = folderMap[item.parentId];
-
-        if (item.type == "folder")
-        {
-            auto child = folderMap[item.id];
-            parent->subFolders.append(child);
-        }
-        else
-        {
-            parent->files.append(item);
-        }
-    }
-
-    return root;
-}
-
-QSharedPointer<FolderNode> DocumentServices::buildAllTree(const QVector<DocumentDetail> &flatList)
-{
-    QHash<QString, QSharedPointer<FolderNode>> folderMap;
-
-    auto root = QSharedPointer<FolderNode>::create();
-    root->id = "";
-    root->name = "root";
-    root->type = "";
-
-    for (const auto &item : flatList)
-    {
-        if (item.type == "folder")
-        {
-            auto node = QSharedPointer<FolderNode>::create();
-            node->id = item.id;
-            node->name = item.name;
-            node->type = item.type;
-            folderMap.insert(item.id, node);
-        }
-    }
-
-    for (const auto &item : flatList)
+    for (const auto &item : documentList)
     {
         if (item.type == "folder")
         {
             auto current = folderMap[item.id];
-            if (item.parentId.isEmpty() || !folderMap.contains(item.parentId))
+            if (item.parentId.isEmpty())
             {
-                root->subFolders.append(current); 
+                rootPtr->subFolders.append(current); 
             }
             else
             {
+                if (folderMap.contains(item.parentId))
+                {   
                 folderMap[item.parentId]->subFolders.append(current);
+                }
             }
         }
         else
         {
-            if (item.parentId.isEmpty() || !folderMap.contains(item.parentId))
+            if (item.parentId.isEmpty())
             {
-                root->files.append(item); 
+                rootPtr->files.append(item); 
             }
             else
             {
+                if (folderMap.contains(item.parentId))
+                {
                 folderMap[item.parentId]->files.append(item);
+                }
             }
         }
     }
 
-    return root;
+    return rootPtr;
 }
 
-FolderPlainNode DocumentServices::convertToPlainNode(const QSharedPointer<FolderNode> &node)
+FolderPlainNode DocumentServices::convertToPlainNode(const QSharedPointer<FolderNode> &folderNodePtr)
 {
-    FolderPlainNode plain;
-    plain.id = node->id;
-    plain.name = node->name;
-    plain.type = node->type;
-    for (const auto &doc : node->files) {
-        plain.files.append(SimpleDocument{doc.id, doc.name, doc.extension, doc.type});
+    FolderPlainNode plainNode;
+    plainNode.id = folderNodePtr->id;
+    plainNode.name = folderNodePtr->name;
+    plainNode.type = folderNodePtr->type;
+    for (const auto &doc : folderNodePtr->files) {
+        plainNode.files.append(Document{doc.id, doc.name, doc.extension, doc.type});
     }
-    for (const auto &childPtr : node->subFolders) {
-        plain.subFolders.append(convertToPlainNode(childPtr));
+    for (const auto &childPtr : folderNodePtr->subFolders) {
+        plainNode.subFolders.append(convertToPlainNode(childPtr));
     }
-    return plain;
+    return plainNode;
 }
 
