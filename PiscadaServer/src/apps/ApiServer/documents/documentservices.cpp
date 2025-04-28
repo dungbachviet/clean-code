@@ -148,7 +148,7 @@ QSharedPointer<FolderNode> DocumentServices::buildFullTree(const QVector<Documen
             {
                 if (folderMap.contains(item.parentId))
                 {
-                folderMap[item.parentId]->files.append(item);
+                    folderMap[item.parentId]->files.append(item);
                 }
             }
         }

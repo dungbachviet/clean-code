@@ -210,7 +210,7 @@ ApiError DocumentDbRepo::list(QVector<DocumentDetail> &documents, bool getArchiv
         return ApiError::fromSqlError(query.lastError());
     }
 
-    query.bindValue(":isDeleted", getArchivedFile ? 1 : 0);
+    query.bindValue(":isDeleted", getArchivedFile);
 
     if (!query.exec())
     {

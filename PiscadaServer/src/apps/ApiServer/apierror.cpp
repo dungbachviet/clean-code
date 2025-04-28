@@ -4,6 +4,27 @@
 
 #include <QSqlError>
 
+int ApiError::statusCodeFromErrorCode(ErrorCode code)
+{
+    switch (code)
+    {
+        case NotImplemented:       return 501;
+        case NotFound:             return 404;
+        case InvalidRequest:       return 400;
+        case ConflictError:        return 409;
+        case InternalError:        return 500;
+        case JsonParseError:       return 400;
+        case JsonTypeError:        return 400;
+        case JsonOtherError:       return 400;
+        case DbConnectionError:    return 500;
+        case DbStatementError:     return 500;
+        case DbTransactionError:   return 500;
+        case UnknownError:         return 500;
+        case NoError:              return 200;
+        default:                   return 500;
+    }
+}
+
 ApiError ApiError::notImplemented()
 {
     return ApiError(NotImplemented, "Not implemented");
@@ -55,7 +76,9 @@ ApiError ApiError::fromSqlError(const QSqlError &error)
     return ApiError(errorCode, error.text());
 }
 
-ApiError::ApiError() : m_errorCode(NoError)
+ApiError::ApiError() 
+    : m_errorCode(NoError)
+    , m_statusCode(200)
 {
 
 }
@@ -63,6 +86,7 @@ ApiError::ApiError() : m_errorCode(NoError)
 ApiError::ApiError(ErrorCode code, const QString &message)
     : m_errorCode(code)
     , m_errorMessage(message)
+    , m_statusCode(statusCodeFromErrorCode(code))
 {
 
 }
@@ -100,9 +124,20 @@ QString ApiError::errorMessage() const
     return m_errorMessage;
 }
 
+void ApiError::setStatusCode(int statusCode)
+{
+    m_statusCode = statusCode;
+}
+
+int ApiError::statusCode() const
+{
+    return m_statusCode;
+}
+
 void to_json(Json &j, const ApiError &error)
 {
     j["errorCode"] = error.m_errorCode;
+    j["statusCode"] = error.m_statusCode;
     if (!error.m_errorMessage.isEmpty())
     {
         j["errorMessage"] = error.m_errorMessage;
@@ -112,6 +147,7 @@ void to_json(Json &j, const ApiError &error)
 void from_json(const Json &j, ApiError &error)
 {
     j["errorCode"].get_to(error.m_errorCode);
+    error.m_statusCode = ApiError::statusCodeFromErrorCode(error.m_errorCode);
     if (j.contains("errorMessage"))
     {
         j["errorMessage"].get_to(error.m_errorMessage);
