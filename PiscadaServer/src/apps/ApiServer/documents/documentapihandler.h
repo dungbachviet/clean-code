@@ -16,7 +16,10 @@ private:
     void updateFolder(const PiMqttMessage &msg);
     void deleteFolder(const PiMqttMessage &msg);
 
-    void createFile(const PiMqttMessage &msg);
+    // void createFile(const PiMqttMessage &msg);
+    void startFileUpload(const PiMqttMessage &msg);
+    void uploadFileChunk(const PiMqttMessage &msg);
+    void finishFileUpload(const PiMqttMessage &msg);
     void getFile(const PiMqttMessage &msg);
     void updateFile(const PiMqttMessage &msg);
     void deleteFile(const PiMqttMessage &msg);

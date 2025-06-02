@@ -6,7 +6,7 @@ include(../../PiscadaModule/piscadamodule_include.pri)
 TEMPLATE = app
 TARGET = ApiServer
 
-QT += core network
+QT += core network concurrent
 
 CONFIG += console
 
@@ -17,7 +17,9 @@ include(templates/templates.pri)
 include(systems/systems.pri)
 include(subsystems/subsystems.pri)
 include(popups/popups.pri)
+include(viewtree/viewtree.pri)
 include(documents/documents.pri)
+include(systemutils/systemutils.pri)
 
 HEADERS += \
     apierror.h \
@@ -33,4 +35,3 @@ SOURCES += \
     apiserverdatabase.cpp \
     apiserverinfo.cpp \
     apiservermodule.cpp
-

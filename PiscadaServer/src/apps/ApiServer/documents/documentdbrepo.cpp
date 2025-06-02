@@ -7,7 +7,7 @@
 #include <QFile>
 #include <QDir>
 
-bool DocumentDbRepo::doesNameExist(const QString &name, const QString &folderId, const QString &type)
+bool DocumentDbRepo::doesNameExist(const QString &name, const QString &folderId, const QString &type, const QString &extension)
 {
     QSqlDatabase db = getConnection(); 
     QSqlQuery query(db);
@@ -19,6 +19,7 @@ bool DocumentDbRepo::doesNameExist(const QString &name, const QString &folderId,
         AND type = :type
         AND isDeleted = 0
         AND (parentId = :folderId OR (parentId IS NULL AND :folderId IS NULL))
+        AND (extension = :extension OR (extension IS NULL AND :extension IS NULL))
         LIMIT 1
     )SQL";
 
@@ -31,6 +32,7 @@ bool DocumentDbRepo::doesNameExist(const QString &name, const QString &folderId,
     query.bindValue(":name", name);
     query.bindValue(":type", type);
     query.bindValue(":folderId", folderId.isEmpty() ? QVariant(QVariant::String) : folderId);
+    query.bindValue(":extension", extension.isEmpty() ? QVariant(QVariant::String) : extension);
 
     if (!query.exec())
     {
@@ -160,7 +162,7 @@ ApiError DocumentDbRepo::read(const QString &id, DocumentDetail &document)
 
     if (!query.next())
     {
-        return ApiError::notFound("document", id);
+        return ApiError::notFound("Document", id);
     }
 
     document.id = query.value("id").toString();
@@ -347,7 +349,7 @@ ApiError DocumentDbRepo::unarchiveFile(const QString &id, DocumentDetail &docume
     }
 
     if (query.numRowsAffected() == 0) {
-        return ApiError::notFound("Deleted document", id);
+        return ApiError::notFound("Document", id);
     }
 
     return ApiError();
@@ -401,3 +403,41 @@ ApiError DocumentDbRepo::getChildrenOfFolder(const QString &folderId, QVector<Do
     return ApiError();
 }
 
+ApiError DocumentDbRepo::getAllDescendantFiles(QVector<DocumentDetail> &documents, const QString &folderId)
+{
+    QSqlDatabase db = getConnection();
+    QSqlQuery query(db);
+
+    QString sql = R"SQL(
+        WITH RECURSIVE descendants AS (
+            SELECT * FROM piscada_system.documents WHERE parentId = :folderId
+            UNION ALL
+            SELECT d.* FROM piscada_system.documents d
+            INNER JOIN descendants ds ON d.parentId = ds.id
+        )
+        SELECT * FROM descendants WHERE type = 'file' AND isDeleted = 0;
+    )SQL";
+
+    if (!query.prepare(sql)) 
+    {
+        return ApiError::fromSqlError(query.lastError());
+    }
+    query.bindValue(":folderId", folderId);
+
+    if (!query.exec()) 
+    {
+        return ApiError::fromSqlError(query.lastError());
+    }
+
+    while (query.next()) 
+    {
+        DocumentDetail doc;
+        doc.id = query.value("id").toString();
+        doc.parentId = query.value("parentId").isNull() ? "" : query.value("parentId").toString();
+        doc.name = query.value("name").toString();
+        doc.type = query.value("type").toString();
+        doc.extension = query.value("extension").isNull() ? "" : query.value("extension").toString();
+        documents.append(doc);
+    }
+    return ApiError();
+}

@@ -8,7 +8,7 @@
 class DocumentDbRepo
 {
 public:
-    static bool doesNameExist(const QString &name, const QString &folderId, const QString &type);
+    static bool doesNameExist(const QString &name, const QString &folderId, const QString &type, const QString &extension);
     static bool isValidParent(const QString &parentId);
     
     static ApiError create(DocumentDetail &document);
@@ -19,6 +19,8 @@ public:
     static ApiError archiveFile(const QString &id);
     static ApiError unarchiveFile(const QString &id, DocumentDetail &document);
     static ApiError getChildrenOfFolder(const QString &folderId, QVector<DocumentDetail> &documents);
+    static ApiError getAllDescendantFiles(QVector<DocumentDetail> &documents, const QString &folderId);
+
 };
 
 #endif // PISCADA_API_SERVER_DOCUMENT_DB_REPO_H

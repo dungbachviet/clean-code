@@ -7,6 +7,10 @@
 #include "templates/templateapihandler.h"
 #include "views/viewapihandler.h"
 #include "documents/documentapihandler.h"
+#include "documents/documentservices.h"
+#include "systemutils/tempcleaninit.h"
+
+#include "viewtree/viewtreeapihandler.h"
 
 #include "serverinfo.h"
 
@@ -49,7 +53,10 @@ ModuleStatus ApiServerModule::construct()
     m_handlers.insert("systems", new SystemApiHandler(m_client));
     m_handlers.insert("templates", new TemplateApiHandler(m_client));
     m_handlers.insert("views", new ViewApiHandler(m_client));
+    m_handlers.insert("viewtree", new ViewTreeApiHandler(m_client));
     m_handlers.insert("documents", new DocumentApiHandler(m_client));
+
+    TempCleanInit::startScheduledCleanup(DocumentServices::tempDocumentPath, 60, 24);
 
     return ModuleStatus::Success();
 }
@@ -131,4 +138,3 @@ void ApiServerModule::onMqttMessageReceived(const PiMqttMessage &msg)
 }
 
 CREATE_PISCADA_MODULE(ApiServerModule)
-
